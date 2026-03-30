@@ -295,6 +295,26 @@ impl Runner {
         assert_eq!(size, visited.len())
     }
 
+    /// Marks the root scope as dirty, forcing a full re-render on the next sync.
+    pub fn invalidate_root(&mut self) {
+        self.dirty_scopes.insert(ScopeId::ROOT);
+    }
+
+    /// Resets hook values for all scopes, forcing hooks to re-initialize on the next render.
+    ///
+    /// Context providers (e.g. `Platform`) are preserved so that framework-level contexts
+    /// remain available to cleanup code that runs during `Runner::drop`.
+    ///
+    /// Used by hot reload to ensure the newly loaded dylib creates fresh hook values with its
+    /// own type identities instead of trying to reuse values created by a different binary.
+    /// All scopes must be reset, not just ROOT, because child scopes also hold values whose
+    /// TypeIds come from the previous binary.
+    pub fn reset_scope_hooks(&self) {
+        for storage in self.scopes_storages.borrow_mut().values_mut() {
+            storage.reset_values_only();
+        }
+    }
+
     pub fn provide_root_context<T: 'static + Clone>(&mut self, context: impl FnOnce() -> T) -> T {
         CurrentContext::run(
             CurrentContext {

@@ -5,6 +5,10 @@ use std::{
         Hasher,
     },
     rc::Rc,
+    sync::atomic::{
+        AtomicUsize,
+        Ordering,
+    },
 };
 
 use futures_channel::mpsc::UnboundedSender;
@@ -117,7 +121,23 @@ impl ReactiveContext {
     }
 
     pub fn try_current() -> Option<Self> {
-        REACTIVE_CONTEXTS_STACK.with_borrow(|contexts| contexts.last().cloned())
+        // Normal path: host's TLS stack.
+        if let Some(rc) = REACTIVE_CONTEXTS_STACK.with_borrow(|contexts| contexts.last().cloned())
+        {
+            return Some(rc);
+        }
+        // Fallback for hot-reload dylibs: call the host's getter via the stored
+        // function pointer (set by the dylib's export_app! expansion before $app() runs).
+        let fn_ptr = HOST_REACTIVE_GETTER_FN.load(Ordering::Acquire);
+        if fn_ptr != 0 {
+            let getter: extern "C" fn() -> *const ReactiveContext =
+                unsafe { std::mem::transmute(fn_ptr) };
+            let ptr = getter();
+            if !ptr.is_null() {
+                return Some(unsafe { (*ptr).clone() });
+            }
+        }
+        None
     }
 
     pub fn current() -> Self {
@@ -137,6 +157,26 @@ impl ReactiveContext {
         subscribers.borrow_mut().insert(self.clone());
         self.inner.write().subscriptions.push(subscribers.clone())
     }
+}
+
+/// Getter function exported from the host binary so the dylib can call it
+/// explicitly to read the host's reactive context TLS stack.
+#[unsafe(no_mangle)]
+pub extern "C" fn freya_get_current_reactive_context() -> *const ReactiveContext {
+    REACTIVE_CONTEXTS_STACK.with_borrow(|stack| {
+        stack
+            .last()
+            .map(|rc| rc as *const ReactiveContext)
+            .unwrap_or(std::ptr::null())
+    })
+}
+
+/// Per-image storage for the host's reactive context getter function pointer.
+static HOST_REACTIVE_GETTER_FN: AtomicUsize = AtomicUsize::new(0);
+
+/// Stores the address of the host's `freya_get_current_reactive_context` function.
+pub fn set_host_reactive_getter(fn_ptr: usize) {
+    HOST_REACTIVE_GETTER_FN.store(fn_ptr, Ordering::Release);
 }
 
 thread_local! {

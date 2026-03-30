@@ -95,6 +95,17 @@ impl ScopeStorage {
         self.values.clear();
         self.contexts.clear();
     }
+
+    /// Resets only hook values, preserving context providers.
+    ///
+    /// Used by hot reload to re-initialize hooks with the new dylib's type identities
+    /// while keeping framework-level contexts (e.g. `Platform`) that the host provides
+    /// at startup and that cannot be re-provided by user code.
+    pub(crate) fn reset_values_only(&mut self) {
+        self.current_run = 0;
+        self.current_value = 0;
+        self.values.clear();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

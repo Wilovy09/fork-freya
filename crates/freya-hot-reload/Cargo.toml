@@ -1,0 +1,28 @@
+[package]
+name = "freya-hot-reload"
+version = "0.4.0-rc.16"
+description = "Hot reload support for Freya applications (development only)."
+edition = "2024"
+license = "MIT"
+authors = ["Marc Espín <mespinsanz@gmail.com>"]
+repository = "https://github.com/marc2332/freya"
+
+[lints]
+workspace = true
+
+[features]
+default = ["skia-engine"]
+skia-engine = ["freya-winit/skia-engine"]
+
+[dependencies]
+freya-core = { workspace = true }
+freya-winit = { workspace = true }
+
+futures-channel = { workspace = true }
+futures-lite = { workspace = true }
+async-io = { workspace = true }
+blocking = { workspace = true }
+serde_json = { workspace = true }
+
+libloading = "0.8"
+notify = "7"

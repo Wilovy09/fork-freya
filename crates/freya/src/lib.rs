@@ -317,6 +317,15 @@ pub mod code_editor {
     pub use freya_code_editor::prelude::*;
 }
 
+/// Reexport `freya-hot-reload` when the `hot-reload` feature is enabled.
+///
+/// See [`freya_hot_reload`] for setup instructions.
+#[cfg(feature = "hot-reload")]
+#[cfg_attr(feature = "docs", doc(cfg(feature = "hot-reload")))]
+pub mod hot_reload {
+    pub use freya_hot_reload::*;
+}
+
 #[cfg(feature = "performance")]
 #[cfg_attr(feature = "docs", doc(cfg(feature = "performance")))]
 pub mod performance {

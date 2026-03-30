@@ -70,7 +70,7 @@ use crate::{
 };
 
 pub struct AppWindow {
-    pub(crate) runner: Runner,
+    pub runner: Runner,
     pub(crate) tree: Tree,
     pub(crate) driver: GraphicsDriver,
     pub(crate) window: Window,
@@ -324,5 +324,10 @@ impl AppWindow {
 
     pub fn window_mut(&mut self) -> &mut Window {
         &mut self.window
+    }
+
+    /// Request the window to redraw.
+    pub fn request_redraw(&self) {
+        self.window.request_redraw();
     }
 }

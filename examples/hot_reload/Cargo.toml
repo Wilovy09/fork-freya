@@ -1,0 +1,22 @@
+[package]
+name = "hot_reload"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true
+
+# The lib target is compiled as a cdylib so freya-hot-reload can load it
+# as a dynamic library and hot-swap the UI at runtime.
+[lib]
+name = "hot_reload"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "hot_reload"
+path = "src/main.rs"
+
+[dependencies]
+freya = { workspace = true }
+freya-hot-reload = { workspace = true }
