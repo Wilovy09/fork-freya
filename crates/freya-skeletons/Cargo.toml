@@ -21,8 +21,6 @@ freya-components = { workspace = true }
 torin = { workspace = true }
 
 [features]
-# Enable only when checking the library standalone (without a real skia engine).
-# In a regular freya app, the engine is provided transitively by `freya`.
 mocked-engine = ["freya-core/mocked-engine"]
 
 [dev-dependencies]

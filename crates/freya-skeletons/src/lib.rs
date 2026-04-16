@@ -1,13 +1,18 @@
+pub mod animation;
+
+use std::time::Duration;
+
+pub use animation::SkeletonAnimation;
 use freya_animation::prelude::*;
 use freya_components::{
     define_theme,
+    get_theme,
     theming::{
-        component_themes::ColorsSheet,
-        hooks::get_theme_or_default,
-        macros::{
-            Preference,
-            ResolvablePreference,
+        component_themes::{
+            ColorsSheet,
+            Theme,
         },
+        macros::Preference,
     },
 };
 use freya_core::prelude::*;
@@ -23,33 +28,8 @@ pub mod prelude {
         SkeletonExt,
         SkeletonStyleThemePartial,
         SkeletonStyleThemePartialExt,
+        register_skeleton_themes,
     };
-}
-
-const DEFAULT_DURATION_MS: u64 = 1000;
-const DEFAULT_CORNER_RADIUS: f32 = 4.;
-
-const SHIMMER_FROM: f32 = -250.;
-const SHIMMER_TO: f32 = 900.;
-const SHIMMER_WIDTH: f32 = 200.;
-
-/// Animation style for the skeleton placeholder.
-#[derive(PartialEq, Clone, Default, Debug)]
-pub enum SkeletonAnimation {
-    /// Fades opacity in and out repeatedly (default).
-    #[default]
-    Pulse,
-    /// A bright band sweeps from left to right.
-    Shimmer,
-}
-
-impl ResolvablePreference<SkeletonAnimation> for Preference<SkeletonAnimation> {
-    fn resolve(&self, _: &ColorsSheet) -> SkeletonAnimation {
-        match self {
-            Self::Reference(_) => panic!("Only Colors support references."),
-            Self::Specific(v) => v.clone(),
-        }
-    }
 }
 
 define_theme! {
@@ -63,19 +43,25 @@ define_theme! {
         background: Color,
         /// Shimmer highlight color. Defaults to `text_placeholder` at reduced opacity.
         shimmer_color: Color,
-        /// Duration of one animation cycle in milliseconds.
-        duration_ms: u64,
+        /// Duration of one animation cycle.
+        duration: Duration,
         /// Animation style: [`SkeletonAnimation::Pulse`] or [`SkeletonAnimation::Shimmer`].
         animation: SkeletonAnimation,
         /// Corner radius of the placeholder shape.
         corner_radius: CornerRadius,
+        /// Starting X position of the shimmer band (pixels, can be negative).
+        shimmer_from: f32,
+        /// Ending X position of the shimmer band (pixels).
+        shimmer_to: f32,
+        /// Width of the shimmer band in pixels.
+        shimmer_width: f32,
     }
 }
 
-/// Skeleton loading placeholder with a configurable theme.
+/// Register the default skeleton theme preferences into a [`Theme`].
 ///
-/// Uses the active theme's `surface_primary` and `text_placeholder` colors by default.
-/// Override any field via the individual setters or `.theme()`.
+/// Call this when building your theme before providing it via `use_init_theme` or
+/// `use_init_root_theme`.
 ///
 /// # Example
 ///
@@ -83,12 +69,51 @@ define_theme! {
 /// # use freya::prelude::*;
 /// # use freya_skeletons::prelude::*;
 /// fn app() -> impl IntoElement {
+///     use_init_root_theme(|| {
+///         let mut theme = light_theme();
+///         register_skeleton_themes(&mut theme);
+///         theme
+///     });
+///     rect()
+/// }
+/// ```
+pub fn register_skeleton_themes(theme: &mut Theme) {
+    let colors: &ColorsSheet = &theme.colors.clone();
+    theme.set(
+        "skeleton",
+        SkeletonStyleThemePreference {
+            background: Preference::Reference("surface_primary"),
+            shimmer_color: Preference::Specific(colors.text_placeholder.with_a(90)),
+            duration: Preference::Specific(Duration::from_millis(1000)),
+            animation: Preference::Specific(SkeletonAnimation::Pulse),
+            corner_radius: Preference::Specific(CornerRadius::new_all(4.)),
+            shimmer_from: Preference::Specific(-250.),
+            shimmer_to: Preference::Specific(900.),
+            shimmer_width: Preference::Specific(200.),
+        },
+    );
+}
+
+/// Skeleton loading placeholder with a configurable theme.
+///
+/// Uses the active theme's `surface_primary` and `text_placeholder` colors by default.
+/// Override any field via the individual setters or `.theme()`.
+///
+/// Requires the skeleton theme to be registered via [`register_skeleton_themes`] before use.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # use freya::prelude::*;
+/// # use freya_skeletons::prelude::*;
+/// # use std::time::Duration;
+/// fn app() -> impl IntoElement {
 ///     let loading = use_state(|| true);
 ///     rect().width(Size::px(200.)).height(Size::px(80.)).child(
 ///         Skeleton::new()
 ///             .loading(*loading.read())
 ///             .animation(SkeletonAnimation::Shimmer)
-///             .duration_ms(1200u64)
+///             .duration(Duration::from_millis(1200))
 ///             .child("Some content"),
 ///     )
 /// }
@@ -148,41 +173,36 @@ impl Component for Skeleton {
         let loading = self.loading;
         let elements = self.elements.clone();
 
-        let raw_theme = get_theme_or_default();
-        let colors = raw_theme.read().colors.clone();
+        let theme = get_theme!(&self.theme, SkeletonStyleThemePreference, "skeleton");
 
-        // Build defaults from the active color sheet, then apply any user overrides.
-        let mut preference = SkeletonStyleThemePreference {
-            background: Preference::Reference("surface_primary"),
-            shimmer_color: Preference::Specific(colors.text_placeholder.with_a(90)),
-            duration_ms: Preference::Specific(DEFAULT_DURATION_MS),
-            animation: Preference::Specific(SkeletonAnimation::Pulse),
-            corner_radius: Preference::Specific(CornerRadius::new_all(DEFAULT_CORNER_RADIUS)),
-        };
-
-        if let Some(partial) = &self.theme {
-            preference.apply_optional(partial);
-        }
-
-        let theme = preference.resolve(&colors);
-
-        // Hook must be called unconditionally. Only `animation` and `duration_ms` affect it.
-        let anim_key = (theme.animation.clone(), theme.duration_ms);
-        let animation =
-            use_animation_with_dependencies(&anim_key, |conf, (animation, duration_ms)| {
+        let anim_key = (
+            theme.animation.clone(),
+            theme.duration,
+            theme.shimmer_from.to_bits(),
+            theme.shimmer_to.to_bits(),
+        );
+        let animation = use_animation_with_dependencies(
+            &anim_key,
+            |conf, (animation, duration, shimmer_from_bits, shimmer_to_bits)| {
                 conf.on_creation(OnCreation::Run);
                 conf.on_change(OnChange::Rerun);
+                let ms = duration.as_millis() as u64;
                 match animation {
                     SkeletonAnimation::Pulse => {
                         conf.on_finish(OnFinish::reverse());
-                        AnimNum::new(0.4, 1.0).time(*duration_ms)
+                        AnimNum::new(0.4, 1.0).time(ms)
                     }
                     SkeletonAnimation::Shimmer => {
                         conf.on_finish(OnFinish::restart());
-                        AnimNum::new(SHIMMER_FROM, SHIMMER_TO).time(*duration_ms)
+                        AnimNum::new(
+                            f32::from_bits(*shimmer_from_bits),
+                            f32::from_bits(*shimmer_to_bits),
+                        )
+                        .time(ms)
                     }
                 }
-            });
+            },
+        );
 
         let value = animation.get().value();
         let is_pulse = theme.animation == SkeletonAnimation::Pulse;
@@ -198,7 +218,7 @@ impl Component for Skeleton {
                         r.child(
                             rect()
                                 .position(Position::new_absolute().left(value))
-                                .width(Size::px(SHIMMER_WIDTH))
+                                .width(Size::px(theme.shimmer_width))
                                 .height(Size::fill())
                                 .background(theme.shimmer_color),
                         )
@@ -237,9 +257,12 @@ pub trait SkeletonExt: StyleExt + ChildrenExt + Sized {
     fn skeleton(mut self, loading: impl Into<bool>) -> Self {
         if loading.into() {
             self.get_children().clear();
-            let theme = get_theme_or_default();
-            let color = theme.read().colors.surface_primary;
-            self.background(color)
+            let theme = get_theme!(
+                &None::<SkeletonStyleThemePartial>,
+                SkeletonStyleThemePreference,
+                "skeleton"
+            );
+            self.background(theme.background)
         } else {
             self
         }

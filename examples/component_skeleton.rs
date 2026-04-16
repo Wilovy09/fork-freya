@@ -12,6 +12,12 @@ fn main() {
 }
 
 fn app() -> impl IntoElement {
+    use_init_root_theme(|| {
+        let mut theme = light_theme();
+        register_skeleton_themes(&mut theme);
+        theme
+    });
+
     let mut loading = use_state(|| true);
 
     rect()
