@@ -45,7 +45,6 @@ members = [
   "./crates/freya-code-editor",
   "./crates/freya-android",
   "./crates/freya-skeletons",
-  "./crates/freya-css",
   "./examples/ai-chat",
   "./examples/state_query_sqlite",
   "./examples/android",
@@ -86,7 +85,6 @@ freya-code-editor = { path = "./crates/freya-code-editor", version = "0.4.0-rc.1
 ] }
 freya-android = { path = "./crates/freya-android", version = "0.4.0-rc.18" }
 freya-skeletons = { path = "./crates/freya-skeletons", version = "0.1.0" }
-freya-css = { path = "./crates/freya-css", version = "0.4.0-rc.18" }
 
 # core
 generational-box = "0.7"
@@ -181,7 +179,6 @@ freya-devtools = { workspace = true, features = ["server", "client"] }
 freya-webview = { workspace = true }
 freya-terminal = { workspace = true }
 freya-code-editor = { workspace = true }
-freya-css = { workspace = true }
 
 freya-skia-safe = { workspace = true }
 
